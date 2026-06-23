@@ -1,0 +1,192 @@
+# 3. Write-up
+
+1. What is React Context API and why is it better than prop drilling for the cart? Give a real example from your code.
+
+React Context API is a built-in state management feature that allows data to be shared across multiple components without manually passing props through every level of the component tree.
+
+In an e-commerce application, the shopping cart is accessed by many components such as ProductList, ProductDetails, Navbar, Cart Page, and Checkout Page. If props were used, the cart state would need to be passed from parent components down through several intermediate components, a process known as prop drilling.
+
+To avoid this problem, the application uses a CartContext. The cart state is stored in a central location and any component can access it using the useCart() hook.
+
+Example:
+
+jsx
+const { cartItems, addToCart, removeFromCart } = useCart();
+
+
+The Navbar component uses cartItems to display the cart count, while ProductCard uses addToCart() to add products. Since both components access the same context, there is no need to pass cart data through multiple layers of components.
+
+Benefits:
+
+* Eliminates prop drilling.
+* Makes state management cleaner.
+* Improves code maintainability.
+* Allows all cart-related components to share the same state.
+
+---
+
+## 2. Why does order_items store unit_price instead of reading the product price at the time of display?
+
+The order_items table stores the unit_price of each product at the time the order is placed.
+
+Example:
+
+A customer purchases a Cricket Bat for ₹1500.
+
+Later, the administrator updates the product price to ₹2000.
+
+If the application reads the current product price from the products table during order display, old orders would incorrectly show ₹2000 instead of the original purchase price of ₹1500.
+
+To preserve historical accuracy, the unit_price is copied into the order_items table when the order is created.
+
+Example:
+
+```sql
+order_items
+-----------
+order_id
+product_id
+quantity
+unit_price
+```
+
+Advantages:
+
+* Maintains accurate order history.
+* Prevents price changes from affecting previous orders.
+* Ensures correct invoice and billing records.
+* Supports auditing and reporting.
+
+---
+
+## 3. What happens in your backend if a customer tries to order 10 units of a product that only has 3 in stock? Show the exact validation code.
+
+Before creating an order, the backend validates available inventory.
+
+If a customer attempts to purchase more items than available stock, the order is rejected and an error response is returned.
+
+Example:
+
+Available stock: 3
+
+Requested quantity: 10
+
+Result:
+
+```json
+{
+  "message": "Insufficient stock"
+}
+```
+
+Validation Code:
+
+```python
+for item in cart_items:
+    cursor.execute(
+        "SELECT stock FROM products WHERE id=%s",
+        (item["product_id"],)
+    )
+
+    product = cursor.fetchone()
+
+    if not product:
+        return jsonify({"message": "Product not found"}), 404
+
+    if item["quantity"] > product["stock"]:
+        return jsonify({
+            "message": "Insufficient stock"
+        }), 400
+```
+
+This validation prevents:
+
+* Negative inventory.
+* Overselling products.
+* Invalid orders.
+
+Only when stock is sufficient will the order be processed and inventory updated.
+
+---
+
+## 4. What is the difference between ProtectedRoute and AdminRoute in your app? Show both components.
+
+### ProtectedRoute
+
+ProtectedRoute ensures that only authenticated users can access certain pages.
+
+Examples:
+
+* Cart Page
+* Orders Page
+* Checkout Page
+
+If a user is not logged in, they are redirected to the login page.
+
+Example:
+
+```jsx
+import { Navigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
+export default function ProtectedRoute({ children }) {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  return children;
+}
+```
+
+---
+
+### AdminRoute
+
+AdminRoute provides an additional authorization check.
+
+The user must:
+
+1. Be logged in.
+2. Have the role "admin".
+
+Only administrators can access pages such as:
+
+* Product Management
+* User Management
+* Order Management
+* Dashboard
+
+Example:
+
+```jsx
+import { Navigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
+export default function AdminRoute({ children }) {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  if (user.role !== "admin") {
+    return <Navigate to="/" />;
+  }
+
+  return children;
+}
+```
+
+### Comparison
+
+| Feature                      | ProtectedRoute | AdminRoute |
+| ---------------------------- | -------------- | ---------- |
+| Requires Login               | Yes            | Yes        |
+| Requires Admin Role          | No             | Yes        |
+| Used for Customer Pages      | Yes            | No         |
+| Used for Admin Pages         | No             | Yes        |
+| Redirects Unauthorized Users | Yes            | Yes        |
+
+Therefore, ProtectedRoute handles authentication, while AdminRoute handles both authentication and authorization.
